@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>บัญชีรายรับ-รายจ่าย</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Config Modal -->
+<div id="config-modal" class="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-icon">⚙️</div>
+      <h2>ตั้งค่าการเชื่อมต่อ</h2>
+      <p>กรอกข้อมูลเพื่อเชื่อมต่อ Google Sheets (OCR ฟรี 100%)</p>
+    </div>
+    <div class="form-group">
+      <label>Google Apps Script URL</label>
+      <input type="url" id="cfg-script-url" placeholder="https://script.google.com/macros/s/...">
+      <span class="hint">URL จาก Google Apps Script ที่ Deploy แล้ว</span>
+    </div>
+    <div class="form-group">
+      <label>OCR.space API Key <span style="color:var(--green);font-weight:400">(ฟรี)</span></label>
+      <input type="text" id="cfg-ocr-key" placeholder="helloworld (ค่าเริ่มต้น ใช้งานได้เลย)">
+      <span class="hint">ใช้ "helloworld" สำหรับทดสอบ หรือสมัครฟรีที่ <a href="https://ocr.space/ocrapi" target="_blank">ocr.space</a> เพื่อรับ 500 req/วัน</span>
+    </div>
+    <div class="form-group">
+      <label>Google Sheet ID</label>
+      <input type="text" id="cfg-sheet-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms">
+      <span class="hint">ID ของ Google Sheet ที่ต้องการใช้งาน</span>
+    </div>
+    <button class="btn-primary full-width" onclick="saveConfig()">บันทึกและเริ่มใช้งาน</button>
+    <a href="SETUP.md" target="_blank" class="setup-link">📖 วิธีตั้งค่า (Setup Guide)</a>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- App -->
+<div class="app" id="app" style="display:none">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-icon">฿</span>
+      <div>
+        <div class="brand-name">MoneyLog</div>
+        <div class="brand-sub">บัญชีรายรับ-รายจ่าย</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a class="nav-item active" data-page="dashboard" onclick="showPage('dashboard',this)">
+        <span class="nav-icon">📊</span> ภาพรวม
+      </a>
+      <a class="nav-item" data-page="add" onclick="showPage('add',this)">
+        <span class="nav-icon">➕</span> เพิ่มรายการ
+      </a>
+      <a class="nav-item" data-page="scan" onclick="showPage('scan',this)">
+        <span class="nav-icon">📷</span> สแกนสลีป/บิล
+      </a>
+      <a class="nav-item" data-page="history" onclick="showPage('history',this)">
+        <span class="nav-icon">📋</span> ประวัติรายการ
+      </a>
+      <a class="nav-item" data-page="report" onclick="showPage('report',this)">
+        <span class="nav-icon">📈</span> รายงานสรุป
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <button class="btn-ghost" onclick="openConfig()">⚙️ ตั้งค่า</button>
+      <button class="btn-ghost" onclick="syncSheets()">🔄 ซิงค์ข้อมูล</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Dashboard -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <h1>ภาพรวมการเงิน</h1>
+        <div class="month-selector">
+          <button onclick="changeMonth(-1)">◀</button>
+          <span id="current-month-label"></span>
+          <button onclick="changeMonth(1)">▶</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card income">
+          <div class="stat-label">รายรับรวม</div>
+          <div class="stat-value" id="total-income">฿0</div>
+          <div class="stat-change" id="income-count">0 รายการ</div>
+        </div>
+        <div class="stat-card expense">
+          <div class="stat-label">รายจ่ายรวม</div>
+          <div class="stat-value" id="total-expense">฿0</div>
+          <div class="stat-change" id="expense-count">0 รายการ</div>
+        </div>
+        <div class="stat-card balance">
+          <div class="stat-label">คงเหลือสุทธิ</div>
+          <div class="stat-value" id="net-balance">฿0</div>
+          <div class="stat-change" id="balance-label">เดือนนี้</div>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="card">
+          <h3>รายจ่ายตามหมวดหมู่</h3>
+          <div id="category-chart" class="category-list"></div>
+        </div>
+        <div class="card">
+          <h3>รายการล่าสุด</h3>
+          <div id="recent-list" class="recent-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Entry -->
+    <div id="page-add" class="page">
+      <div class="page-header">
+        <h1>เพิ่มรายการ</h1>
+      </div>
+      <div class="card form-card">
+        <div class="type-toggle">
+          <button id="btn-expense" class="toggle-btn active" onclick="setType('expense')">💸 รายจ่าย</button>
+          <button id="btn-income" class="toggle-btn" onclick="setType('income')">💰 รายรับ</button>
+        </div>
+
+        <div class="form-group">
+          <label>จำนวนเงิน (บาท)</label>
+          <div class="amount-input-wrap">
+            <span class="currency">฿</span>
+            <input type="number" id="entry-amount" placeholder="0.00" min="0" step="0.01">
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>หมวดหมู่</label>
+          <select id="entry-category">
+            <option value="">-- เลือกหมวดหมู่ --</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>รายละเอียด</label>
+          <input type="text" id="entry-note" placeholder="เช่น ข้าวกลางวัน, ค่าน้ำไฟ...">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>วันที่</label>
+            <input type="date" id="entry-date">
+          </div>
+          <div class="form-group">
+            <label>เวลา</label>
+            <input type="time" id="entry-time">
+          </div>
+        </div>
+
+        <button class="btn-primary full-width" onclick="addEntry()">
+          ✅ บันทึกรายการ
+        </button>
+      </div>
+    </div>
+
+    <!-- Scan -->
+    <div id="page-scan" class="page">
+      <div class="page-header">
+        <h1>สแกนสลีป / บิล</h1>
+      </div>
+
+      <div class="card scan-card">
+        <div id="drop-zone" class="drop-zone" onclick="document.getElementById('file-input').click()" ondragover="handleDragOver(event)" ondrop="handleDrop(event)">
+          <div class="drop-icon">📷</div>
+          <p>คลิกหรือลากไฟล์มาวาง</p>
+          <p class="hint">รองรับ JPG, PNG, PDF</p>
+          <input type="file" id="file-input" accept="image/*,.pdf" style="display:none" onchange="handleFileSelect(event)">
+        </div>
+
+        <div id="preview-section" style="display:none">
+          <img id="preview-img" src="" alt="preview" class="preview-img">
+          <button class="btn-secondary" onclick="scanImage()">🤖 วิเคราะห์ด้วย AI</button>
+        </div>
+
+        <div id="scan-loading" style="display:none" class="scan-loading">
+          <div class="spinner"></div>
+          <p>กำลังวิเคราะห์...</p>
+        </div>
+
+        <div id="scan-result" style="display:none" class="scan-result">
+          <h3>✅ ผลการวิเคราะห์</h3>
+          <div class="form-group">
+            <label>ประเภท</label>
+            <select id="scan-type">
+              <option value="expense">รายจ่าย</option>
+              <option value="income">รายรับ</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>จำนวนเงิน</label>
+            <input type="number" id="scan-amount" placeholder="0.00">
+          </div>
+          <div class="form-group">
+            <label>หมวดหมู่</label>
+            <select id="scan-category"></select>
+          </div>
+          <div class="form-group">
+            <label>รายละเอียด</label>
+            <input type="text" id="scan-note" placeholder="">
+          </div>
+          <div class="form-group">
+            <label>วันที่</label>
+            <input type="date" id="scan-date">
+          </div>
+          <button class="btn-primary full-width" onclick="saveScanEntry()">💾 บันทึกรายการ</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div id="page-history" class="page">
+      <div class="page-header">
+        <h1>ประวัติรายการ</h1>
+        <div class="filter-bar">
+          <select id="filter-type" onchange="applyFilters()">
+            <option value="">ทั้งหมด</option>
+            <option value="income">รายรับ</option>
+            <option value="expense">รายจ่าย</option>
+          </select>
+          <select id="filter-category" onchange="applyFilters()">
+            <option value="">ทุกหมวด</option>
+          </select>
+          <input type="month" id="filter-month" onchange="applyFilters()">
+        </div>
+      </div>
+      <div class="card">
+        <div id="history-list" class="history-list"></div>
+      </div>
+    </div>
+
+    <!-- Report -->
+    <div id="page-report" class="page">
+      <div class="page-header">
+        <h1>รายงานสรุป</h1>
+        <div class="month-selector">
+          <button onclick="changeReportMonth(-1)">◀</button>
+          <span id="report-month-label"></span>
+          <button onclick="changeReportMonth(1)">▶</button>
+        </div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat-card income">
+          <div class="stat-label">รายรับรวม</div>
+          <div class="stat-value" id="rpt-income">฿0</div>
+        </div>
+        <div class="stat-card expense">
+          <div class="stat-label">รายจ่ายรวม</div>
+          <div class="stat-value" id="rpt-expense">฿0</div>
+        </div>
+        <div class="stat-card balance">
+          <div class="stat-label">คงเหลือ</div>
+          <div class="stat-value" id="rpt-net">฿0</div>
+        </div>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="card">
+          <h3>สัดส่วนรายจ่ายตามหมวดหมู่</h3>
+          <canvas id="pie-chart" width="300" height="300"></canvas>
+        </div>
+        <div class="card">
+          <h3>รายจ่ายรายวัน</h3>
+          <canvas id="bar-chart" width="400" height="300"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>สรุปตามหมวดหมู่</h3>
+        <table class="summary-table" id="summary-table">
+          <thead><tr><th>หมวดหมู่</th><th>จำนวนรายการ</th><th>ยอดรวม</th><th>สัดส่วน</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="export-bar">
+        <button class="btn-secondary" onclick="exportCSV()">📥 ดาวน์โหลด CSV</button>
+        <button class="btn-secondary" onclick="exportJSON()">📄 ดาวน์โหลด JSON</button>
+        <button class="btn-secondary" onclick="openGoogleSheet()">📊 เปิด Google Sheet</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/scan.js"></script>
+<script src="js/sheets.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
