@@ -1,10 +1,6 @@
 // ============================================================
 // scan.js — สแกนสลีปด้วย OCR.space (ฟรี 100%) + Smart Parser
 // ============================================================
-// OCR.space: ฟรี 500 req/วัน ต่อ IP, ไม่ต้องสมัคร
-// key "helloworld" = demo key สำหรับทดสอบ
-// สมัครฟรีที่ ocr.space เพื่อรับ key ที่ใช้ได้มากกว่า
-// ============================================================
 
 let currentFile = null;
 
@@ -128,8 +124,10 @@ function parseReceiptText(text) {
 
   const category = detectCategory(ft, type);
   confidence += 15;
+
   const note = extractNote(lines, ft);
   const recipient = extractRecipient(lines, ft);
+
   return { amount, date, type, category, note, recipient, confidence: Math.min(confidence, 100) };
 }
 
@@ -146,7 +144,6 @@ function extractAmount(ft) {
       if (n > 0 && n < 10000000) return n;
     }
   }
-  // fallback: ตัวเลขทศนิยม 2 หลักที่ใหญ่ที่สุด
   const nums = [...ft.matchAll(/([0-9,]+\.[0-9]{2})/g)]
     .map(m => parseFloat(m[1].replace(/,/g, '')))
     .filter(n => n > 0 && n < 10000000);
@@ -154,8 +151,10 @@ function extractAmount(ft) {
 }
 
 function extractDate(ft) {
-  const thaiMonths = {'ม.ค.':1,'ก.พ.':2,'มี.ค.':3,'เม.ย.':4,'พ.ค.':5,'มิ.ย.':6,
-    'ก.ค.':7,'ส.ค.':8,'ก.ย.':9,'ต.ค.':10,'พ.ย.':11,'ธ.ค.':12};
+  const thaiMonths = {
+    'ม.ค.':1,'ก.พ.':2,'มี.ค.':3,'เม.ย.':4,'พ.ค.':5,'มิ.ย.':6,
+    'ก.ค.':7,'ส.ค.':8,'ก.ย.':9,'ต.ค.':10,'พ.ย.':11,'ธ.ค.':12
+  };
 
   const tm = ft.match(/(\d{1,2})\s*(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)\s*(\d{2,4})/);
   if (tm) {
@@ -202,6 +201,13 @@ function detectCategory(ft, type) {
   return 'other_exp';
 }
 
+function extractNote(lines, ft) {
+  const m = ft.match(/(?:ร้าน|to:|ผู้รับ|merchant|บริษัท)\s*([^\n\r]{3,30})/i);
+  if (m) return m[1].trim().slice(0, 50);
+  const first = lines.find(l => l.length >= 4 && l.length <= 40 && !/^\d+$/.test(l));
+  return first ? first.slice(0, 50) : 'จากสลีป/บิล';
+}
+
 function extractRecipient(lines, ft) {
   const m = ft.match(/(?:โอนไป(?:ยัง)?|ผู้รับ|to\s*:|recipient|transfer to|pay to|ชำระให้|จ่ายให้|บัญชี(?:ปลายทาง)?)[:\s]*([^\n\r]{2,40})/i);
   if (m) return m[1].trim().slice(0, 50);
@@ -209,6 +215,7 @@ function extractRecipient(lines, ft) {
   if (bankM) return bankM[1].trim().slice(0, 50);
   return '';
 }
+
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
