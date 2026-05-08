@@ -59,6 +59,7 @@ async function scanImage() {
     document.getElementById('scan-type').value = result.type;
     document.getElementById('scan-amount').value = result.amount || '';
     document.getElementById('scan-date').value = result.date;
+    document.getElementById('scan-recipient').value = result.recipient || '';
     document.getElementById('scan-note').value = result.note;
 
     populateScanCategorySelect(result.type);
@@ -127,10 +128,9 @@ function parseReceiptText(text) {
 
   const category = detectCategory(ft, type);
   confidence += 15;
-
   const note = extractNote(lines, ft);
-
-  return { amount, date, type, category, note, confidence: Math.min(confidence, 100) };
+  const recipient = extractRecipient(lines, ft);
+  return { amount, date, type, category, note, recipient, confidence: Math.min(confidence, 100) };
 }
 
 function extractAmount(ft) {
@@ -223,7 +223,9 @@ function saveScanEntry() {
   if (!amount || amount <= 0) { showToast('กรุณากรอกจำนวนเงิน', 'error'); return; }
   if (!category) { showToast('กรุณาเลือกหมวดหมู่', 'error'); return; }
 
-  const entry = { type, amount, category, note, date, time: '' };
+  const recipient = document.getElementById('scan-recipient').value;
+  const fullNote = recipient ? `${recipient}${note ? ' - ' + note : ''}` : note;
+  const entry = { type, amount, category, note: fullNote, date, time: '' };
   const saved = addEntryData(entry);
   pushToSheets(saved);
 
