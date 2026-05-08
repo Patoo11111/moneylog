@@ -31,7 +31,7 @@ const CATEGORIES = {
 function getConfig() {
   return {
     scriptUrl: localStorage.getItem('ml_script_url') || '',
-    apiKey: localStorage.getItem('ml_ocr_key') || '',
+    ocrKey: localStorage.getItem('ml_ocr_key') || '',
     sheetId: localStorage.getItem('ml_sheet_id') || '',
   };
 }
