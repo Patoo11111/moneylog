@@ -1,7 +1,6 @@
 // ============================================================
 // config.js — การตั้งค่าแอป
 // ============================================================
-
 const CATEGORIES = {
   expense: [
     { id: 'food', label: 'อาหาร & เครื่องดื่ม', icon: '🍜' },
@@ -32,18 +31,15 @@ function getConfig() {
   return {
     scriptUrl: localStorage.getItem('ml_script_url') || '',
     ocrKey: localStorage.getItem('ml_ocr_key') || '',
-    sheetId: localStorage.getItem('ml_sheet_id') || '',
   };
 }
 
 function saveConfig() {
   const url = document.getElementById('cfg-script-url').value.trim();
   const ocrKey = document.getElementById('cfg-ocr-key').value.trim();
-  const id = document.getElementById('cfg-sheet-id').value.trim();
   if (!url) { showToast('กรุณากรอก Script URL', 'error'); return; }
   localStorage.setItem('ml_script_url', url);
   localStorage.setItem('ml_ocr_key', ocrKey);
-  localStorage.setItem('ml_sheet_id', id);
   document.getElementById('config-modal').classList.add('hidden');
   document.getElementById('app').style.display = 'flex';
   showToast('บันทึกการตั้งค่าแล้ว ✅', 'success');
@@ -54,7 +50,6 @@ function openConfig() {
   const cfg = getConfig();
   document.getElementById('cfg-script-url').value = cfg.scriptUrl;
   document.getElementById('cfg-ocr-key').value = cfg.ocrKey || '';
-  document.getElementById('cfg-sheet-id').value = cfg.sheetId;
   document.getElementById('config-modal').classList.remove('hidden');
 }
 
