@@ -202,13 +202,13 @@ function detectCategory(ft, type) {
   return 'other_exp';
 }
 
-function extractNote(lines, ft) {
-  const m = ft.match(/(?:ร้าน|to:|ผู้รับ|merchant|บริษัท)\s*([^\n\r]{3,30})/i);
+function extractRecipient(lines, ft) {
+  const m = ft.match(/(?:โอนไป(?:ยัง)?|ผู้รับ|to\s*:|recipient|transfer to|pay to|ชำระให้|จ่ายให้|บัญชี(?:ปลายทาง)?)[:\s]*([^\n\r]{2,40})/i);
   if (m) return m[1].trim().slice(0, 50);
-  const first = lines.find(l => l.length >= 4 && l.length <= 40 && !/^\d+$/.test(l));
-  return first ? first.slice(0, 50) : 'จากสลีป/บิล';
+  const bankM = ft.match(/(?:กสิกร|กรุงไทย|ไทยพาณิชย์|กรุงเทพ|ออมสิน|ทหารไทย|tmb|kbank|ktb|scb|bbl|gsb)[^\n]*\n?([^\n\r]{3,30})/i);
+  if (bankM) return bankM[1].trim().slice(0, 50);
+  return '';
 }
-
 function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
