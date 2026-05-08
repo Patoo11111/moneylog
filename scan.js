@@ -125,8 +125,11 @@ function parseReceiptText(text) {
   const category = detectCategory(ft, type);
   confidence += 15;
 
+  console.log('=== OCR LINES ===');
+  lines.forEach((l, i) => console.log(i, JSON.stringify(l)));
   const note = extractNote(lines, ft);
   const recipient = extractRecipient(lines, text);
+  console.log('recipient:', recipient);
 
   return { amount, date, type, category, note, recipient, confidence: Math.min(confidence, 100) };
 }
