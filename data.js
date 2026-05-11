@@ -1,33 +1,66 @@
 // ============================================================
-// data.js — จัดการข้อมูลใน localStorage
+// data.js — จัดการข้อมูลผ่าน Google Sheets (ไม่ใช้ localStorage)
 // ============================================================
 
-function getAllEntries() {
+// cache ข้อมูลใน memory ระหว่าง session
+let _entriesCache = null;
+
+async function getAllEntries() {
+  if (_entriesCache !== null) return _entriesCache;
+  return await fetchEntriesFromSheets();
+}
+
+async function fetchEntriesFromSheets() {
+  const cfg = getConfig();
+  if (!cfg.scriptUrl) return [];
   try {
-    return JSON.parse(localStorage.getItem('ml_entries') || '[]');
-  } catch { return []; }
+    const res = await fetch(cfg.scriptUrl, { method: 'GET' });
+    const data = await res.json();
+    if (data.success) {
+      _entriesCache = data.data || [];
+      return _entriesCache;
+    }
+  } catch (err) {
+    console.warn('fetchEntries failed:', err.message);
+  }
+  return [];
 }
 
-function saveEntries(entries) {
-  localStorage.setItem('ml_entries', JSON.stringify(entries));
+function clearCache() {
+  _entriesCache = null;
 }
 
-function addEntryData(entry) {
-  const entries = getAllEntries();
+async function addEntryData(entry) {
   entry.id = Date.now().toString();
   entry.createdAt = new Date().toISOString();
-  entries.unshift(entry);
-  saveEntries(entries);
+  // เพิ่มใน cache ก่อนทันที (optimistic update)
+  if (_entriesCache !== null) {
+    _entriesCache.unshift(entry);
+  }
   return entry;
 }
 
-function deleteEntryData(id) {
-  const entries = getAllEntries().filter(e => e.id !== id);
-  saveEntries(entries);
+async function deleteEntryData(id) {
+  // ลบจาก cache
+  if (_entriesCache !== null) {
+    _entriesCache = _entriesCache.filter(e => e.id !== id);
+  }
+  // ลบจาก Sheets
+  const cfg = getConfig();
+  if (!cfg.scriptUrl) return;
+  try {
+    const form = new FormData();
+    form.append('action', 'deleteEntry');
+    form.append('id', id);
+    await fetch(cfg.scriptUrl, { method: 'POST', mode: 'no-cors', body: form });
+  } catch (err) {
+    console.warn('deleteEntry failed:', err.message);
+  }
 }
 
-function getEntriesByMonth(year, month) {
-  return getAllEntries().filter(e => {
+async function getEntriesByMonth(year, month) {
+  const entries = await getAllEntries();
+  return entries.filter(e => {
     const d = new Date(e.date);
     return d.getFullYear() === year && d.getMonth() + 1 === month;
   });
