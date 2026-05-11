@@ -1,5 +1,5 @@
 // ============================================================
-// charts.js — กราฟรายงาน (ใช้ Canvas API โดยตรง)
+// charts.js — กราฟรายงาน (async สำหรับ Sheets)
 // ============================================================
 
 let reportMonth, reportYear;
@@ -11,11 +11,12 @@ function changeReportMonth(delta) {
   renderReport();
 }
 
-function renderReport() {
-  const label = new Date(reportYear, reportMonth - 1).toLocaleDateString('th-TH', { year: 'numeric', month: 'long' });
+async function renderReport() {
+  const label = new Date(reportYear, reportMonth - 1)
+    .toLocaleDateString('th-TH', { year: 'numeric', month: 'long' });
   document.getElementById('report-month-label').textContent = label;
 
-  const entries = getEntriesByMonth(reportYear, reportMonth);
+  const entries = await getEntriesByMonth(reportYear, reportMonth);
   const stats = calcStats(entries);
 
   document.getElementById('rpt-income').textContent = fmt(stats.income);
@@ -37,16 +38,17 @@ function renderPieChart(entries) {
   const cats = groupByCategory(expEntries).slice(0, 7);
 
   if (cats.length === 0) {
-    ctx.fillStyle = '#9B9A94';
+    ctx.fillStyle = '#94A3B8';
     ctx.font = '14px Sarabun, sans-serif';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText('ไม่มีข้อมูลรายจ่าย', w / 2, h / 2);
     return;
   }
 
-  const colors = ['#1D9E75','#E24B4A','#BA7517','#185FA5','#7F77DD','#D85A30','#9B9A94'];
+  const colors = ['#5B9BD5','#F5C842','#4CAF82','#E05C5C','#7F77DD','#D85A30','#94A3B8'];
   const total = cats.reduce((s, c) => s + c.total, 0);
-  const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 30;
+  const cx = w / 2, cy = h / 2 - 10, r = Math.min(w, h) / 2 - 40;
   let startAngle = -Math.PI / 2;
 
   cats.forEach((c, i) => {
@@ -61,7 +63,6 @@ function renderPieChart(entries) {
     ctx.lineWidth = 2;
     ctx.stroke();
 
-    // Label
     if (slice > 0.2) {
       const midAngle = startAngle + slice / 2;
       const lx = cx + (r * 0.65) * Math.cos(midAngle);
@@ -78,17 +79,17 @@ function renderPieChart(entries) {
   });
 
   // Legend
-  const legendX = 10, legendY = h - cats.length * 18 - 10;
+  const legendY = h - cats.length * 18 - 8;
   cats.forEach((c, i) => {
     const info = getCategoryInfo(c.id);
     const y = legendY + i * 18;
     ctx.fillStyle = colors[i % colors.length];
-    ctx.fillRect(legendX, y, 10, 10);
-    ctx.fillStyle = '#5F5E5A';
+    ctx.fillRect(10, y, 10, 10);
+    ctx.fillStyle = '#64748B';
     ctx.font = '11px Sarabun, sans-serif';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText(info.label, legendX + 14, y);
+    ctx.fillText(info.label, 24, y);
   });
 }
 
@@ -100,14 +101,14 @@ function renderBarChart(entries) {
 
   const expEntries = entries.filter(e => e.type === 'expense');
   if (expEntries.length === 0) {
-    ctx.fillStyle = '#9B9A94';
+    ctx.fillStyle = '#94A3B8';
     ctx.font = '14px Sarabun, sans-serif';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText('ไม่มีข้อมูลรายจ่าย', w / 2, h / 2);
     return;
   }
 
-  // Group by day
   const dayMap = {};
   expEntries.forEach(e => {
     const d = new Date(e.date).getDate();
@@ -122,16 +123,16 @@ function renderBarChart(entries) {
   const chartH = h - pad.top - pad.bottom;
   const barW = Math.min(chartW / days.length - 4, 28);
 
-  // Grid lines
-  ctx.strokeStyle = '#E8E6E0';
+  // Grid
+  ctx.strokeStyle = '#E2E8F0';
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
     const y = pad.top + chartH - (i / 4) * chartH;
     ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(w - pad.right, y); ctx.stroke();
-    const val = (maxVal * i / 4);
-    ctx.fillStyle = '#9B9A94'; ctx.font = '10px IBM Plex Mono, monospace';
+    ctx.fillStyle = '#94A3B8';
+    ctx.font = '10px IBM Plex Mono, monospace';
     ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-    ctx.fillText(fmtShort(val), pad.left - 6, y);
+    ctx.fillText(fmtShort(maxVal * i / 4), pad.left - 6, y);
   }
 
   // Bars
@@ -141,12 +142,17 @@ function renderBarChart(entries) {
     const x = pad.left + (i / days.length) * chartW + (chartW / days.length - barW) / 2;
     const y = pad.top + chartH - barH;
 
-    ctx.fillStyle = '#E24B4A';
+    ctx.fillStyle = '#5B9BD5';
     ctx.beginPath();
-    ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    if (ctx.roundRect) {
+      ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
+    } else {
+      ctx.rect(x, y, barW, barH);
+    }
     ctx.fill();
 
-    ctx.fillStyle = '#5F5E5A'; ctx.font = '10px Sarabun, sans-serif';
+    ctx.fillStyle = '#64748B';
+    ctx.font = '10px Sarabun, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     ctx.fillText(d, x + barW / 2, pad.top + chartH + 6);
   });
@@ -157,7 +163,7 @@ function renderSummaryTable(entries) {
   const cats = groupByCategory(expEntries);
   const total = cats.reduce((s, c) => s + c.total, 0) || 1;
   const tbody = document.querySelector('#summary-table tbody');
-  if (cats.length === 0) {
+  if (!cats.length) {
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--gray-400);padding:1.5rem">ไม่มีข้อมูล</td></tr>';
     return;
   }
