@@ -1,8 +1,39 @@
 // ============================================================
-// sheets.js — ซิงค์ข้อมูลกับ Google Sheets
-// READ: fetch ปกติ (Apps Script รองรับ CORS อัตโนมัติ)
-// WRITE/DELETE: GET + no-cors (ไม่ต้องการ response)
+// sheets.js — ใช้ JSONP (ไม่มี CORS) สำหรับ read/write
 // ============================================================
+
+// ── JSONP: ดึงข้อมูลจาก Sheets ──
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_jsonp_' + Date.now();
+    const script = document.createElement('script');
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP timeout'));
+    }, 10000);
+
+    window[cbName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    script.onerror = () => { cleanup(); reject(new Error('JSONP error')); };
+    script.src = url + '&callback=' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+// ── Image pixel: write โดยไม่ต้องการ response ──
+function fireAndForget(url) {
+  const img = new Image();
+  img.src = url;
+}
 
 async function pushToSheets(entry) {
   const cfg = getConfig();
@@ -20,11 +51,7 @@ async function pushToSheets(entry) {
       amount:    String(entry.amount || 0),
       createdAt: entry.createdAt || new Date().toISOString()
     });
-    // no-cors GET — ไม่ต้องการ response แค่ให้ Sheets บันทึก
-    fetch(cfg.scriptUrl + '?' + params.toString(), {
-      method: 'GET',
-      mode: 'no-cors'
-    });
+    fireAndForget(cfg.scriptUrl + '?' + params.toString());
   } catch (err) {
     console.warn('pushToSheets failed:', err.message);
   }
@@ -35,10 +62,7 @@ async function deleteFromSheets(id) {
   if (!cfg.scriptUrl) return;
   try {
     const params = new URLSearchParams({ action: 'deleteEntry', id });
-    fetch(cfg.scriptUrl + '?' + params.toString(), {
-      method: 'GET',
-      mode: 'no-cors'
-    });
+    fireAndForget(cfg.scriptUrl + '?' + params.toString());
   } catch (err) {
     console.warn('deleteFromSheets failed:', err.message);
   }
@@ -58,10 +82,10 @@ async function syncSheets() {
     renderDashboard();
     if (document.getElementById('page-history').classList.contains('active')) renderHistory();
     if (document.getElementById('page-report').classList.contains('active')) renderReport();
-    showToast(`โหลดข้อมูล ${entries.length} รายการแล้ว ✅`, 'success');
+    showToast('โหลดข้อมูล ' + entries.length + ' รายการแล้ว ✅', 'success');
   } catch (err) {
     console.error(err);
-    showToast('โหลดข้อมูลล้มเหลว ❌', 'error');
+    showToast('โหลดข้อมูลล้มเหลว: ' + err.message + ' ❌', 'error');
   }
 }
 
