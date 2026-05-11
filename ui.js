@@ -221,6 +221,10 @@ function exportJSON() {
 
 function openGoogleSheet() {
   const cfg = getConfig();
-  if (!cfg.sheetId) { showToast('ยังไม่ได้ตั้งค่า Sheet ID', 'error'); return; }
-  window.open('https://docs.google.com/spreadsheets/d/' + cfg.sheetId, '_blank');
+  if (!cfg.scriptUrl) {
+    showToast('กรุณาตั้งค่า Script URL ก่อน', 'error');
+    return;
+  }
+  // เปิด Script URL — Apps Script จะ redirect ไป Sheet อัตโนมัติ
+  window.open(cfg.scriptUrl, '_blank');
 }
