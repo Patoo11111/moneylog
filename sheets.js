@@ -1,16 +1,15 @@
 // ============================================================
-// sheets.js — ใช้ JSONP (ไม่มี CORS) สำหรับ read/write
+// sheets.js — ใช้ JSONP ทั้ง read และ write (ไม่มี CORS)
 // ============================================================
 
-// ── JSONP: ดึงข้อมูลจาก Sheets ──
 function jsonp(url) {
   return new Promise((resolve, reject) => {
-    const cbName = '_jsonp_' + Date.now();
+    const cbName = '_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     const script = document.createElement('script');
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error('JSONP timeout'));
-    }, 10000);
+      reject(new Error('timeout'));
+    }, 15000);
 
     window[cbName] = (data) => {
       cleanup();
@@ -23,16 +22,10 @@ function jsonp(url) {
       if (script.parentNode) script.parentNode.removeChild(script);
     }
 
-    script.onerror = () => { cleanup(); reject(new Error('JSONP error')); };
-    script.src = url + '&callback=' + cbName;
+    script.onerror = () => { cleanup(); reject(new Error('script error')); };
+    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
     document.head.appendChild(script);
   });
-}
-
-// ── Image pixel: write โดยไม่ต้องการ response ──
-function fireAndForget(url) {
-  const img = new Image();
-  img.src = url;
 }
 
 async function pushToSheets(entry) {
@@ -51,7 +44,8 @@ async function pushToSheets(entry) {
       amount:    String(entry.amount || 0),
       createdAt: entry.createdAt || new Date().toISOString()
     });
-    fireAndForget(cfg.scriptUrl + '?' + params.toString());
+    await jsonp(cfg.scriptUrl + '?' + params.toString());
+    console.log('pushToSheets success:', entry.id);
   } catch (err) {
     console.warn('pushToSheets failed:', err.message);
   }
@@ -62,7 +56,7 @@ async function deleteFromSheets(id) {
   if (!cfg.scriptUrl) return;
   try {
     const params = new URLSearchParams({ action: 'deleteEntry', id });
-    fireAndForget(cfg.scriptUrl + '?' + params.toString());
+    await jsonp(cfg.scriptUrl + '?' + params.toString());
   } catch (err) {
     console.warn('deleteFromSheets failed:', err.message);
   }
@@ -85,7 +79,7 @@ async function syncSheets() {
     showToast('โหลดข้อมูล ' + entries.length + ' รายการแล้ว ✅', 'success');
   } catch (err) {
     console.error(err);
-    showToast('โหลดข้อมูลล้มเหลว: ' + err.message + ' ❌', 'error');
+    showToast('โหลดข้อมูลล้มเหลว ❌', 'error');
   }
 }
 
