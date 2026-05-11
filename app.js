@@ -4,7 +4,6 @@
 window.addEventListener('DOMContentLoaded', () => {
   const cfg = getConfig();
   if (!cfg.scriptUrl) {
-    // Show config modal first time
     document.getElementById('config-modal').classList.remove('hidden');
   } else {
     document.getElementById('config-modal').classList.add('hidden');
@@ -13,7 +12,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function initApp() {
+async function initApp() {
   const now = new Date();
   currentDashYear = now.getFullYear();
   currentDashMonth = now.getMonth() + 1;
@@ -28,6 +27,12 @@ function initApp() {
 
   setType('expense');
   populateFilterCategory();
+
+  // โหลดข้อมูลจาก Sheets ก่อนแสดงผล
+  showToast('กำลังโหลดข้อมูล...');
+  await getAllEntries();
+  showToast('');
+
   renderDashboard();
   showPage('dashboard', document.querySelector('.nav-item[data-page="dashboard"]'));
 }
