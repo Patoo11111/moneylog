@@ -6,7 +6,7 @@ let currentFile = null;
 
 function handleDragOver(e) {
   e.preventDefault();
-  document.getElementById('drop-zone').style.borderColor = 'var(--green)';
+  document.getElementById('drop-zone').style.borderColor = 'var(--blue)';
 }
 
 function handleDrop(e) {
@@ -125,11 +125,8 @@ function parseReceiptText(text) {
   const category = detectCategory(ft, type);
   confidence += 15;
 
-  console.log('=== OCR LINES ===');
-  lines.forEach((l, i) => console.log(i, JSON.stringify(l)));
   const note = extractNote(lines, ft);
   const recipient = extractRecipient(lines, text);
-  console.log('recipient:', recipient);
 
   return { amount, date, type, category, note, recipient, confidence: Math.min(confidence, 100) };
 }
@@ -191,9 +188,9 @@ function detectCategory(ft, type) {
     if (/เงินเดือน|salary|payroll/.test(ft)) return 'salary';
     return 'transfer';
   }
-  if (/ร้านอาหาร|restaurant|coffee|cafe|กาแฟ|ข้าว|อาหาร|food|ก๋วยเตี๋ยว|สุกี้|ชาบู|pizza|burger|bakery|truemoney shop|สุพรรณ/.test(ft)) return 'food';
+  if (/shopeefood|grabfood|foodpanda|lineman|ร้านอาหาร|restaurant|coffee|cafe|กาแฟ|ข้าว|อาหาร|food|ก๋วยเตี๋ยว|สุกี้|ชาบู|pizza|burger|bakery|truemoney shop|สุพรรณ/.test(ft)) return 'food';
   if (/grab|bolt|แท็กซี่|taxi|bts|mrt|รถ|bus|train|fuel|น้ำมัน|parking|ที่จอด/.test(ft)) return 'transport';
-  if (/7-eleven|seven|lotus|big c|makro|tesco|โลตัส|ห้าง|mall|shop|store|lazada|shopee/.test(ft)) return 'shopping';
+  if (/7-eleven|seven|lotus|big c|makro|tesco|โลตัส|ห้าง|mall|lazada|shopee(?!food)/.test(ft)) return 'shopping';
   if (/ค่าเช่า|rent|condo|หอพัก|apartment/.test(ft)) return 'housing';
   if (/ไฟฟ้า|น้ำประปา|internet|โทรศัพท์|ค่าน้ำ|electricity|water|phone|true|ais|dtac/.test(ft)) return 'utilities';
   if (/โรงพยาบาล|hospital|clinic|คลินิก|ยา|pharmacy|แพทย์|doctor|dental/.test(ft)) return 'health';
@@ -205,63 +202,48 @@ function detectCategory(ft, type) {
 }
 
 function extractNote(lines, ft) {
-  // สำหรับบิลร้านค้า ดึงชื่อร้าน
   const shopM = ft.match(/(?:สาขา|branch)\s*([^\n\r]{3,30})/i);
   if (shopM) return shopM[1].trim().slice(0, 50);
   return 'จากสลีป/บิล';
 }
 
+// ตรวจว่าบรรทัดนี้เป็น "ขยะ" ที่ไม่ใช่ชื่อผู้รับ
+function isJunkLine(t) {
+  return (
+    t.length < 2 || t.length > 60 ||
+    /^xxx/i.test(t) ||                          // เลขบัญชีปิดบัง
+    /^\d/.test(t) ||                            // ขึ้นต้นตัวเลข
+    /^[A-Z0-9]{6,}$/.test(t) ||               // รหัสตัวอักษรพิมพ์ใหญ่ล้วน เช่น SFBD5E647PDB
+    /รหัสอ้างอิง|เลขที่รายการ|เลขที่ใบเสร็จ|สแกน|ค่าธรรมเนียม|จำนวน|บาท/i.test(t) ||
+    /ธ\.กสิกร|ธ\.ไทยพาณิชย์|ธ\.กรุงไทย|ธ\.กรุงเทพ|kbank|scb|bbl|ktb|gsb|tmb/i.test(t) ||
+    /โอนเงิน|ชำระเงิน|สำเร็จ/i.test(t) ||
+    /พ\.ค\.|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\./.test(t)
+  );
+}
+
 function extractRecipient(lines, originalText) {
-  // วิธีที่ 1: หาลูกศร ↓ แล้วดูชื่อบรรทัดถัดไป (สลีปโอนเงิน KBank, SCB, PromptPay)
+  // วิธีที่ 1: หาลูกศร ↓ แล้วดูบรรทัดถัดไปที่เป็นชื่อ
   const arrowIdx = lines.findIndex(l => /↓|→|▼/.test(l));
   if (arrowIdx !== -1) {
-    for (let i = arrowIdx + 1; i < Math.min(arrowIdx + 6, lines.length); i++) {
-      const line = lines[i].trim();
-      if (
-        line.length >= 2 && line.length <= 60 &&
-        /[\u0E00-\u0E7F A-Za-z]/.test(line) &&   // มีตัวอักษร
-        !/^xxx/.test(line) &&                      // ไม่ใช่เลขบัญชีปิดบัง
-        !/^\d/.test(line) &&                       // ไม่ขึ้นต้นด้วยตัวเลข
-        !/ธ\.กสิกร|ธ\.ไทยพาณิชย์|ธ\.กรุงไทย|ธ\.กรุงเทพ|kbank|scb|bbl|ktb|gsb|tmb|PromptPay/i.test(line) // ไม่ใช่ชื่อธนาคาร
-      ) {
-        // ตัด คำนำหน้า นาย/นาง/น.ส. ออก ถ้าต้องการเก็บเฉพาะชื่อ
-        return line.trim().slice(0, 50);
+    for (let i = arrowIdx + 1; i < Math.min(arrowIdx + 5, lines.length); i++) {
+      const t = lines[i].trim();
+      if (!isJunkLine(t) && /[\u0E00-\u0E7F A-Za-z]/.test(t)) {
+        return t.slice(0, 50);
       }
     }
   }
 
-  // วิธีที่ 2: บรรทัดที่มีชื่อคน (นาย/นาง/น.ส.) ที่ 2 = ผู้รับ
-  // หาบรรทัดชื่อคนทั้งหมด (รวมที่ไม่มีคำนำหน้า)
-  // ชื่อคนไทย: มีตัวอักษรไทย, ไม่ใช่เลขบัญชี, ไม่ใช่ชื่อธนาคาร, ไม่ใช่วันที่
+  // วิธีที่ 2: ชื่อคน/ร้านค้าที่ 2 (ชื่อแรก = ผู้ส่ง, ชื่อที่สอง = ผู้รับ)
   const nameLines = lines.filter(l => {
     const t = l.trim();
-    return (
-      t.length >= 3 && t.length <= 50 &&
-      /[\u0E00-\u0E7F]/.test(t) &&
-      !/^xxx/.test(t) &&
-      !/^\d/.test(t) &&
-      !/ธ\.กสิกร|ธ\.ไทยพาณิชย์|ธ\.กรุงไทย|ธ\.กรุงเทพ|kbank|scb|bbl|ktb|gsb|tmb/i.test(t) &&
-      !/โอนเงิน|ชำระเงิน|สำเร็จ|จำนวน|ค่าธรรมเนียม|เลขที่รายการ|เลขที่ใบเสร็จ|สแกน/i.test(t) &&
-      !/พ\.ค\.|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\./.test(t)
-    );
+    return !isJunkLine(t) && /[\u0E00-\u0E7F A-Za-z]/.test(t);
   });
-  // ชื่อแรก = ผู้ส่ง, ชื่อที่สอง = ผู้รับ
-  if (nameLines.length >= 2) {
-    return nameLines[1].trim().slice(0, 50);
-  }
-  if (nameLines.length === 1) {
-    return nameLines[0].trim().slice(0, 50);
-  }
+  if (nameLines.length >= 2) return nameLines[1].trim().slice(0, 50);
+  if (nameLines.length === 1) return nameLines[0].trim().slice(0, 50);
 
   // วิธีที่ 3: ชื่อในวงเล็บ เช่น (สุพรรณอาหารไทย)
   const parenM = originalText.match(/\(([^\)]{3,30})\)/);
-  if (parenM && /[\u0E00-\u0E7F]/.test(parenM[1])) {
-    return parenM[1].trim();
-  }
-
-  // วิธีที่ 4: ชื่อร้านค้า TRUEMONEY SHOP หรือชื่อบรรทัดหลัง "ชำระเงินสำเร็จ"
-  const shopM = originalText.match(/TRUEMONEY SHOP[^\n]*\n([^\n]{3,40})/i);
-  if (shopM) return shopM[1].trim().slice(0, 50);
+  if (parenM && /[\u0E00-\u0E7F]/.test(parenM[1])) return parenM[1].trim();
 
   return '';
 }
