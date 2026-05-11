@@ -1,5 +1,7 @@
 // ============================================================
-// sheets.js — ซิงค์ข้อมูลกับ Google Sheets ผ่าน Apps Script
+// sheets.js — ซิงค์ข้อมูลกับ Google Sheets
+// READ: fetch ปกติ (Apps Script รองรับ CORS อัตโนมัติ)
+// WRITE/DELETE: GET + no-cors (ไม่ต้องการ response)
 // ============================================================
 
 async function pushToSheets(entry) {
@@ -7,17 +9,22 @@ async function pushToSheets(entry) {
   if (!cfg.scriptUrl) return;
   try {
     const info = getCategoryInfo(entry.category);
-    const form = new FormData();
-    form.append('action', 'addEntry');
-    form.append('id', entry.id || '');
-    form.append('date', entry.date || '');
-    form.append('time', entry.time || '');
-    form.append('type', entry.type === 'income' ? 'รายรับ' : 'รายจ่าย');
-    form.append('category', info.label || '');
-    form.append('note', entry.note || '');
-    form.append('amount', entry.amount || 0);
-    form.append('createdAt', entry.createdAt || new Date().toISOString());
-    await fetch(cfg.scriptUrl, { method: 'POST', mode: 'no-cors', body: form });
+    const params = new URLSearchParams({
+      action:    'addEntry',
+      id:        entry.id || '',
+      date:      entry.date || '',
+      time:      entry.time || '',
+      type:      entry.type === 'income' ? 'รายรับ' : 'รายจ่าย',
+      category:  info.label || '',
+      note:      entry.note || '',
+      amount:    String(entry.amount || 0),
+      createdAt: entry.createdAt || new Date().toISOString()
+    });
+    // no-cors GET — ไม่ต้องการ response แค่ให้ Sheets บันทึก
+    fetch(cfg.scriptUrl + '?' + params.toString(), {
+      method: 'GET',
+      mode: 'no-cors'
+    });
   } catch (err) {
     console.warn('pushToSheets failed:', err.message);
   }
@@ -27,10 +34,11 @@ async function deleteFromSheets(id) {
   const cfg = getConfig();
   if (!cfg.scriptUrl) return;
   try {
-    const form = new FormData();
-    form.append('action', 'deleteEntry');
-    form.append('id', id);
-    await fetch(cfg.scriptUrl, { method: 'POST', mode: 'no-cors', body: form });
+    const params = new URLSearchParams({ action: 'deleteEntry', id });
+    fetch(cfg.scriptUrl + '?' + params.toString(), {
+      method: 'GET',
+      mode: 'no-cors'
+    });
   } catch (err) {
     console.warn('deleteFromSheets failed:', err.message);
   }
@@ -47,12 +55,12 @@ async function syncSheets() {
   try {
     clearCache();
     const entries = await getAllEntries();
-    // re-render ทุกหน้า
     renderDashboard();
     if (document.getElementById('page-history').classList.contains('active')) renderHistory();
     if (document.getElementById('page-report').classList.contains('active')) renderReport();
     showToast(`โหลดข้อมูล ${entries.length} รายการแล้ว ✅`, 'success');
   } catch (err) {
+    console.error(err);
     showToast('โหลดข้อมูลล้มเหลว ❌', 'error');
   }
 }
