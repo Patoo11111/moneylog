@@ -2,28 +2,50 @@
 // data.js — จัดการข้อมูลผ่าน Google Sheets (ไม่ใช้ localStorage)
 // ============================================================
 
-// cache ข้อมูลใน memory ระหว่าง session
 let _entriesCache = null;
 
 async function getAllEntries() {
   if (_entriesCache !== null) return _entriesCache;
-  return await fetchEntriesFromSheets();
-}
-
-async function fetchEntriesFromSheets() {
   const cfg = getConfig();
   if (!cfg.scriptUrl) return [];
   try {
     const res = await fetch(cfg.scriptUrl, { method: 'GET' });
     const data = await res.json();
     if (data.success) {
-      _entriesCache = data.data || [];
+      // แปลง category label กลับเป็น id
+      _entriesCache = (data.data || []).map(e => ({
+        ...e,
+        category: getCategoryIdByLabel(e.category) || e.category,
+        date: normalizeDate(e.date)
+      }));
+      // เรียงใหม่ล่าสุดก่อน
+      _entriesCache.sort((a, b) => b.id.localeCompare(a.id));
       return _entriesCache;
     }
   } catch (err) {
     console.warn('fetchEntries failed:', err.message);
   }
   return [];
+}
+
+// แปลง category label → id เช่น "อาหาร & เครื่องดื่ม" → "food"
+function getCategoryIdByLabel(label) {
+  for (const type of ['expense', 'income']) {
+    const found = CATEGORIES[type].find(c => c.label === label);
+    if (found) return found.id;
+  }
+  return null;
+}
+
+// แปลงวันที่จาก Sheets ให้เป็น YYYY-MM-DD
+function normalizeDate(raw) {
+  if (!raw) return '';
+  // ถ้าเป็น Date object string เช่น "Sun May 03 2026 00:00:00 GMT+0700"
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) {
+    return d.toISOString().slice(0, 10);
+  }
+  return String(raw).slice(0, 10);
 }
 
 function clearCache() {
@@ -33,7 +55,6 @@ function clearCache() {
 async function addEntryData(entry) {
   entry.id = Date.now().toString();
   entry.createdAt = new Date().toISOString();
-  // เพิ่มใน cache ก่อนทันที (optimistic update)
   if (_entriesCache !== null) {
     _entriesCache.unshift(entry);
   }
@@ -41,20 +62,8 @@ async function addEntryData(entry) {
 }
 
 async function deleteEntryData(id) {
-  // ลบจาก cache
   if (_entriesCache !== null) {
     _entriesCache = _entriesCache.filter(e => e.id !== id);
-  }
-  // ลบจาก Sheets
-  const cfg = getConfig();
-  if (!cfg.scriptUrl) return;
-  try {
-    const form = new FormData();
-    form.append('action', 'deleteEntry');
-    form.append('id', id);
-    await fetch(cfg.scriptUrl, { method: 'POST', mode: 'no-cors', body: form });
-  } catch (err) {
-    console.warn('deleteEntry failed:', err.message);
   }
 }
 
