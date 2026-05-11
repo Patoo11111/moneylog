@@ -9,7 +9,7 @@ async function getAllEntries() {
   const cfg = getConfig();
   if (!cfg.scriptUrl) return [];
   try {
-    const data = await jsonp(cfg.scriptUrl + '?action=getAll');
+    const data = await jsonp(cfg.scriptUrl + '?');
     if (data.success) {
       _entriesCache = (data.data || []).map(e => ({
         ...e,
