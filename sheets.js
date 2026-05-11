@@ -7,8 +7,6 @@ async function pushToSheets(entry) {
   if (!cfg.scriptUrl) return;
   try {
     const info = getCategoryInfo(entry.category);
-
-    // ใช้ FormData แทน JSON เพราะ no-cors ส่ง JSON body ไม่ได้
     const form = new FormData();
     form.append('action', 'addEntry');
     form.append('id', entry.id || '');
@@ -19,14 +17,22 @@ async function pushToSheets(entry) {
     form.append('note', entry.note || '');
     form.append('amount', entry.amount || 0);
     form.append('createdAt', entry.createdAt || new Date().toISOString());
-
-    await fetch(cfg.scriptUrl, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: form
-    });
+    await fetch(cfg.scriptUrl, { method: 'POST', mode: 'no-cors', body: form });
   } catch (err) {
-    console.warn('Sheets sync failed:', err.message);
+    console.warn('pushToSheets failed:', err.message);
+  }
+}
+
+async function deleteFromSheets(id) {
+  const cfg = getConfig();
+  if (!cfg.scriptUrl) return;
+  try {
+    const form = new FormData();
+    form.append('action', 'deleteEntry');
+    form.append('id', id);
+    await fetch(cfg.scriptUrl, { method: 'POST', mode: 'no-cors', body: form });
+  } catch (err) {
+    console.warn('deleteFromSheets failed:', err.message);
   }
 }
 
@@ -37,20 +43,21 @@ async function syncSheets() {
     openConfig();
     return;
   }
-  showToast('กำลังซิงค์...');
-  const entries = getAllEntries();
-  let success = 0;
-  for (const entry of entries) {
-    try {
-      await pushToSheets(entry);
-      success++;
-    } catch {}
+  showToast('กำลังโหลดข้อมูล...');
+  try {
+    clearCache();
+    const entries = await getAllEntries();
+    // re-render ทุกหน้า
+    renderDashboard();
+    if (document.getElementById('page-history').classList.contains('active')) renderHistory();
+    if (document.getElementById('page-report').classList.contains('active')) renderReport();
+    showToast(`โหลดข้อมูล ${entries.length} รายการแล้ว ✅`, 'success');
+  } catch (err) {
+    showToast('โหลดข้อมูลล้มเหลว ❌', 'error');
   }
-  showToast(`ซิงค์ ${success}/${entries.length} รายการแล้ว ✅`, 'success');
 }
 
 function openGoogleSheet() {
-  // เปิด Google Sheet ผ่าน Script URL (redirect ไปที่ sheet)
   const cfg = getConfig();
   if (!cfg.scriptUrl) {
     showToast('กรุณาตั้งค่า Script URL ก่อน', 'error');
