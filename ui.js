@@ -1,5 +1,5 @@
 // ============================================================
-// ui.js — ฟังก์ชัน UI ทั่วไป
+// ui.js — ฟังก์ชัน UI (async สำหรับ Sheets)
 // ============================================================
 
 let currentPage = 'dashboard';
@@ -18,8 +18,8 @@ function showPage(name, el) {
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
-  t.className = 'toast show ' + type;
-  setTimeout(() => t.className = 'toast', 2500);
+  t.className = 'toast' + (msg ? ' show ' + type : '');
+  if (msg) setTimeout(() => t.className = 'toast', 2500);
 }
 
 // ─── Entry type toggle ───
@@ -33,7 +33,7 @@ function setType(type) {
 
 function populateCategorySelect(selectId, type) {
   const sel = document.getElementById(selectId);
-  sel.innerHTML = '<option value="">-- เลือกหมวดหมู่ --</option>';
+  sel.innerHTML = '<option value="">— เลือกหมวดหมู่ —</option>';
   CATEGORIES[type].forEach(c => {
     const o = document.createElement('option');
     o.value = c.id; o.textContent = c.icon + ' ' + c.label;
@@ -52,8 +52,8 @@ function populateScanCategorySelect(type) {
   });
 }
 
-// ─── Add entry from form ───
-function addEntry() {
+// ─── Add entry ───
+async function addEntry() {
   const amount = parseFloat(document.getElementById('entry-amount').value);
   const category = document.getElementById('entry-category').value;
   const note = document.getElementById('entry-note').value.trim();
@@ -65,18 +65,17 @@ function addEntry() {
   if (!date) { showToast('กรุณาเลือกวันที่', 'error'); return; }
 
   const entry = { type: currentType, amount, category, note, date, time };
-  const saved = addEntryData(entry);
-  pushToSheets(saved);
+  const saved = await addEntryData(entry);
+  await pushToSheets(saved);
 
   document.getElementById('entry-amount').value = '';
   document.getElementById('entry-note').value = '';
   showToast('บันทึกรายการแล้ว ✅', 'success');
+  renderDashboard();
 }
 
-// ─── History filters ───
-function applyFilters() {
-  renderHistory();
-}
+// ─── Filter ───
+function applyFilters() { renderHistory(); }
 
 function populateFilterCategory() {
   const sel = document.getElementById('filter-category');
@@ -100,27 +99,25 @@ function changeMonth(delta) {
   renderDashboard();
 }
 
-function renderDashboard() {
-  const label = new Date(currentDashYear, currentDashMonth - 1).toLocaleDateString('th-TH', { year: 'numeric', month: 'long' });
+async function renderDashboard() {
+  const label = new Date(currentDashYear, currentDashMonth - 1)
+    .toLocaleDateString('th-TH', { year: 'numeric', month: 'long' });
   document.getElementById('current-month-label').textContent = label;
 
-  const entries = getEntriesByMonth(currentDashYear, currentDashMonth);
+  const entries = await getEntriesByMonth(currentDashYear, currentDashMonth);
   const stats = calcStats(entries);
 
   document.getElementById('total-income').textContent = fmt(stats.income);
   document.getElementById('total-expense').textContent = fmt(stats.expense);
   document.getElementById('net-balance').textContent = fmt(stats.net);
-  const inc = entries.filter(e => e.type === 'income');
-  const exp = entries.filter(e => e.type === 'expense');
-  document.getElementById('income-count').textContent = inc.length + ' รายการ';
-  document.getElementById('expense-count').textContent = exp.length + ' รายการ';
+  document.getElementById('income-count').textContent = entries.filter(e => e.type === 'income').length + ' รายการ';
+  document.getElementById('expense-count').textContent = entries.filter(e => e.type === 'expense').length + ' รายการ';
 
   // Category bars
-  const expEntries = entries.filter(e => e.type === 'expense');
-  const cats = groupByCategory(expEntries);
+  const cats = groupByCategory(entries.filter(e => e.type === 'expense'));
   const maxAmt = cats.length ? cats[0].total : 1;
   const catEl = document.getElementById('category-chart');
-  if (cats.length === 0) {
+  if (!cats.length) {
     catEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📂</div><p>ยังไม่มีรายการ</p></div>';
   } else {
     catEl.innerHTML = cats.slice(0, 6).map(c => {
@@ -138,11 +135,10 @@ function renderDashboard() {
 
   // Recent
   const recentEl = document.getElementById('recent-list');
-  const recent = entries.slice(0, 8);
-  if (recent.length === 0) {
+  if (!entries.length) {
     recentEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>ยังไม่มีรายการเดือนนี้</p></div>';
   } else {
-    recentEl.innerHTML = recent.map(e => entryRowHTML(e, true)).join('');
+    recentEl.innerHTML = entries.slice(0, 8).map(e => entryRowHTML(e, true)).join('');
   }
 }
 
@@ -164,22 +160,23 @@ function entryRowHTML(e, compact = false) {
   </div>`;
 }
 
-function deleteEntry(id) {
+async function deleteEntry(id) {
   if (!confirm('ลบรายการนี้?')) return;
-  deleteEntryData(id);
+  await deleteEntryData(id);
+  await deleteFromSheets(id);
   renderHistory();
   if (currentPage === 'dashboard') renderDashboard();
   showToast('ลบรายการแล้ว');
 }
 
 // ─── History ───
-function renderHistory() {
+async function renderHistory() {
   populateFilterCategory();
   const type = document.getElementById('filter-type').value;
   const cat = document.getElementById('filter-category').value;
   const month = document.getElementById('filter-month').value;
 
-  let entries = getAllEntries();
+  let entries = await getAllEntries();
   if (type) entries = entries.filter(e => e.type === type);
   if (cat) entries = entries.filter(e => e.category === cat);
   if (month) {
@@ -191,7 +188,7 @@ function renderHistory() {
   }
 
   const el = document.getElementById('history-list');
-  if (entries.length === 0) {
+  if (!entries.length) {
     el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><p>ไม่พบรายการ</p></div>';
   } else {
     el.innerHTML = entries.map(e => entryRowHTML(e, false)).join('');
@@ -199,8 +196,8 @@ function renderHistory() {
 }
 
 // ─── Export ───
-function exportCSV() {
-  const entries = getAllEntries();
+async function exportCSV() {
+  const entries = await getAllEntries();
   if (!entries.length) { showToast('ไม่มีข้อมูล', 'error'); return; }
   const header = 'วันที่,ประเภท,หมวดหมู่,รายละเอียด,จำนวนเงิน\n';
   const rows = entries.map(e => {
@@ -208,23 +205,13 @@ function exportCSV() {
     return [e.date, e.type === 'income' ? 'รายรับ' : 'รายจ่าย', info.label, e.note || '', e.amount].join(',');
   }).join('\n');
   const blob = new Blob(['\uFEFF' + header + rows], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'moneylog_export.csv'; a.click();
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'moneylog_export.csv'; a.click();
 }
 
-function exportJSON() {
-  const entries = getAllEntries();
+async function exportJSON() {
+  const entries = await getAllEntries();
   const blob = new Blob([JSON.stringify(entries, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'moneylog_export.json'; a.click();
-}
-
-function openGoogleSheet() {
-  const cfg = getConfig();
-  if (!cfg.scriptUrl) {
-    showToast('กรุณาตั้งค่า Script URL ก่อน', 'error');
-    return;
-  }
-  // เปิด Script URL — Apps Script จะ redirect ไป Sheet อัตโนมัติ
-  window.open(cfg.scriptUrl, '_blank');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'moneylog_export.json'; a.click();
 }
