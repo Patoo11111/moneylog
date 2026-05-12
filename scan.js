@@ -252,7 +252,7 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function saveScanEntry() {
+async function saveScanEntry() {
   const amount = parseFloat(document.getElementById('scan-amount').value);
   const category = document.getElementById('scan-category').value;
   const note = document.getElementById('scan-note').value;
@@ -265,8 +265,8 @@ function saveScanEntry() {
   const recipient = document.getElementById('scan-recipient').value;
   const fullNote = recipient ? `${recipient}${note ? ' - ' + note : ''}` : note;
   const entry = { type, amount, category, note: fullNote, date, time: '' };
-  const saved = addEntryData(entry);
-  pushToSheets(saved);
+  const saved = await addEntryData(entry);
+  await pushToSheets(saved);
 
   document.getElementById('drop-zone').style.display = 'block';
   document.getElementById('preview-section').style.display = 'none';
