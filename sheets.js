@@ -1,32 +1,6 @@
 // ============================================================
-// sheets.js — ใช้ JSONP ทั้ง read และ write (ไม่มี CORS)
+// sheets.js — write/delete ผ่าน JSONP (jsonp() อยู่ใน data.js)
 // ============================================================
-
-function jsonp(url) {
-  return new Promise((resolve, reject) => {
-    const cbName = '_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const script = document.createElement('script');
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('timeout'));
-    }, 15000);
-
-    window[cbName] = (data) => {
-      cleanup();
-      resolve(data);
-    };
-
-    function cleanup() {
-      clearTimeout(timeout);
-      delete window[cbName];
-      if (script.parentNode) script.parentNode.removeChild(script);
-    }
-
-    script.onerror = () => { cleanup(); reject(new Error('script error')); };
-    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
-    document.head.appendChild(script);
-  });
-}
 
 async function pushToSheets(entry) {
   const cfg = getConfig();
@@ -44,8 +18,8 @@ async function pushToSheets(entry) {
       amount:    String(entry.amount || 0),
       createdAt: entry.createdAt || new Date().toISOString()
     });
-    await jsonp(cfg.scriptUrl + '?' + params.toString());
-    console.log('pushToSheets success:', entry.id);
+    const result = await jsonp(cfg.scriptUrl + '?' + params.toString());
+    console.log('pushToSheets:', result.success ? 'OK' : 'FAIL', entry.id);
   } catch (err) {
     console.warn('pushToSheets failed:', err.message);
   }
@@ -78,7 +52,6 @@ async function syncSheets() {
     if (document.getElementById('page-report').classList.contains('active')) renderReport();
     showToast('โหลดข้อมูล ' + entries.length + ' รายการแล้ว ✅', 'success');
   } catch (err) {
-    console.error(err);
     showToast('โหลดข้อมูลล้มเหลว ❌', 'error');
   }
 }
