@@ -275,5 +275,6 @@ async function saveScanEntry() {
   document.getElementById('file-input').value = '';
   currentFile = null;
 
+  renderDashboard();
   showToast('บันทึกรายการจากสลีปแล้ว ✅', 'success');
 }
