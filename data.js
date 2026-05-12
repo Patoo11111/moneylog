@@ -2,6 +2,35 @@
 // data.js — จัดการข้อมูลผ่าน Google Sheets (JSONP, ไม่มี CORS)
 // ============================================================
 
+// ── JSONP helper (ต้องโหลดก่อน sheets.js) ──
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const cbName = '_cb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    const script = document.createElement('script');
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP timeout'));
+    }, 15000);
+
+    window[cbName] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    function cleanup() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      if (script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    script.onerror = () => { cleanup(); reject(new Error('JSONP script error')); };
+    // ไม่มี action = ดึงข้อมูลทั้งหมด, มี action = write
+    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
+    document.head.appendChild(script);
+  });
+}
+
+// ── Cache ──
 let _entriesCache = null;
 
 async function getAllEntries() {
@@ -9,7 +38,8 @@ async function getAllEntries() {
   const cfg = getConfig();
   if (!cfg.scriptUrl) return [];
   try {
-    const data = await jsonp(cfg.scriptUrl + '?');
+    // ไม่ส่ง action = Apps Script จะดึงข้อมูลทั้งหมด
+    const data = await jsonp(cfg.scriptUrl);
     if (data.success) {
       _entriesCache = (data.data || []).map(e => ({
         ...e,
