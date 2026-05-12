@@ -108,6 +108,14 @@ async function runOCR(file) {
   return data.ParsedResults?.[0]?.ParsedText || '';
 }
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isStoreBill(ft) {
+  return /7-eleven|seven|ใบเสร็จ|receipt|รายการสินค้า|ยอดสุทธิ|เงินสด|เงินทอน|รหัสร้าน/.test(ft);
+}
+
 function parseReceiptText(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const ft = text.toLowerCase();
@@ -126,7 +134,7 @@ function parseReceiptText(text) {
   confidence += 15;
 
   const note = extractNote(lines, ft);
-  const recipient = extractRecipient(lines, text);
+  const recipient = extractRecipient(lines, text, ft);
 
   return { amount, date, type, category, note, recipient, confidence: Math.min(confidence, 100) };
 }
@@ -202,36 +210,28 @@ function detectCategory(ft, type) {
 }
 
 function extractNote(lines, ft) {
-  // บิลร้านค้า: ดึงชื่อสาขา
-  const shopM = ft.match(/(?:สาขา|branch)\s*([^\n\r]{3,30})/i);
+  const shopM = ft.match(/(?:สาขา|branch)\s*([^\n\r]{3,40})/i);
   if (shopM) return shopM[1].trim().slice(0, 50);
-  // บิลทั่วไป: ดึงบรรทัดแรกที่มีความหมาย
-  const first = lines.find(l => l.length >= 4 && l.length <= 50 && !/^\d/.test(l));
-  return first ? first.slice(0, 50) : 'จากสลีป/บิล';
+  return 'จากสลีป/บิล';
 }
 
-// ตรวจว่าบรรทัดนี้เป็น "ขยะ" ที่ไม่ใช่ชื่อผู้รับ
 function isJunkLine(t) {
   return (
     t.length < 2 || t.length > 60 ||
-    /^xxx/i.test(t) ||                          // เลขบัญชีปิดบัง
-    /^\d/.test(t) ||                            // ขึ้นต้นตัวเลข
-    /^[A-Z0-9]{6,}$/.test(t) ||               // รหัสตัวอักษรพิมพ์ใหญ่ล้วน เช่น SFBD5E647PDB
-    /รหัสอ้างอิง|เลขที่รายการ|เลขที่ใบเสร็จ|สแกน|ค่าธรรมเนียม|จำนวน|บาท/i.test(t) ||
+    /^xxx/i.test(t) ||
+    /^\d/.test(t) ||
+    /^[A-Z0-9]{6,}$/.test(t) ||
+    /รหัสอ้างอิง|เลขที่รายการ|เลขที่ใบเสร็จ|สแกน|ค่าธรรมเนียม|จำนวน|บาท|รหัสร้าน/i.test(t) ||
     /ธ\.กสิกร|ธ\.ไทยพาณิชย์|ธ\.กรุงไทย|ธ\.กรุงเทพ|kbank|scb|bbl|ktb|gsb|tmb/i.test(t) ||
     /โอนเงิน|ชำระเงิน|สำเร็จ/i.test(t) ||
-    /พ\.ค\.|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\./.test(t)
+    /พ\.ค\.|ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\./.test(t) ||
+    /7-eleven|seven|สาขา|รายการสินค้า|ยอดสุทธิ|เงินทอน|all member|ศูนย์บริการ/i.test(t)
   );
 }
 
-function extractRecipient(lines, originalText) {
-  // ถ้าเป็นบิลร้านค้า (7-eleven, ร้านค้า) ไม่มีผู้รับ
-  const ft = originalText.toLowerCase();
-  if (/7-eleven|seven|receipt|ใบเสร็จ|รายการสินค้า|ยอดสุทธิ|เงินสด/i.test(ft)) {
-    return ''; // บิลร้านค้า ไม่มีผู้รับ
-  }
+function extractRecipient(lines, originalText, ft) {
+  if (isStoreBill(ft)) return '';
 
-  // สลีปโอนเงิน: หาลูกศร ↓ แล้วดูชื่อถัดไป
   const arrowIdx = lines.findIndex(l => /↓|→|▼/.test(l));
   if (arrowIdx !== -1) {
     for (let i = arrowIdx + 1; i < Math.min(arrowIdx + 5, lines.length); i++) {
@@ -242,12 +242,14 @@ function extractRecipient(lines, originalText) {
     }
   }
 
-  // ชื่อคนที่ 2 = ผู้รับ (ชื่อแรก = ผู้ส่ง)
   const nameLines = lines.filter(l => {
     const t = l.trim();
-    return !isJunkLine(t) && /[\u0E00-\u0E7F A-Za-z]/.test(t);
+    return !isJunkLine(t) && /[\u0E00-\u0E7F]/.test(t);
   });
   if (nameLines.length >= 2) return nameLines[1].trim().slice(0, 50);
+
+  const parenM = originalText.match(/\(([^\)]{3,30})\)/);
+  if (parenM && /[\u0E00-\u0E7F]/.test(parenM[1])) return parenM[1].trim();
 
   return '';
 }
