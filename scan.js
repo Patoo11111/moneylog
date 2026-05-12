@@ -230,6 +230,8 @@ function isJunkLine(t) {
 }
 
 function extractRecipient(lines, originalText, ft) {
+  const payM = originalText.match(/PAYMENT\s+TO\s+([A-Z][A-Z\s]{2,30})/i);
+  if (payM) return payM[1].trim().slice(0, 50);
   if (isStoreBill(ft)) return '';
 
   const arrowIdx = lines.findIndex(l => /↓|→|▼/.test(l));
