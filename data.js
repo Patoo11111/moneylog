@@ -77,7 +77,9 @@ function clearCache() {
 async function addEntryData(entry) {
   entry.id = Date.now().toString();
   entry.createdAt = new Date().toISOString();
-  if (_entriesCache !== null) _entriesCache.unshift(entry);
+  // ตรวจสอบ date format ให้เป็น YYYY-MM-DD เสมอ
+  if (entry.date) entry.date = normalizeDate(entry.date);
+  if (_cache !== null) _cache.unshift(entry);
   return entry;
 }
 
