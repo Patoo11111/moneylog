@@ -230,10 +230,14 @@ function isJunkLine(t) {
 }
 
 function extractRecipient(lines, originalText, ft) {
-  const payM = originalText.match(/PAYMENT\s+TO\s+([A-Z][A-Z\s]{2,30})/i);
+  // วิธีที่ 1: ดึงชื่อจาก "PAYMENT TO ..." (เช่น SHOPEEFOOD)
+  const payM = originalText.match(/PAYMENT\s+TO\s+([A-Za-z][A-Za-z\s]{1,30})/i);
   if (payM) return payM[1].trim().slice(0, 50);
+
+  // วิธีที่ 2: บิลร้านค้า → ไม่มีผู้รับ
   if (isStoreBill(ft)) return '';
 
+  // วิธีที่ 3: หาลูกศร ↓ แล้วดูชื่อถัดไป (สลีปโอนเงิน)
   const arrowIdx = lines.findIndex(l => /↓|→|▼/.test(l));
   if (arrowIdx !== -1) {
     for (let i = arrowIdx + 1; i < Math.min(arrowIdx + 5, lines.length); i++) {
@@ -244,12 +248,14 @@ function extractRecipient(lines, originalText, ft) {
     }
   }
 
+  // วิธีที่ 4: ชื่อคนที่ 2 = ผู้รับ
   const nameLines = lines.filter(l => {
     const t = l.trim();
     return !isJunkLine(t) && /[\u0E00-\u0E7F]/.test(t);
   });
   if (nameLines.length >= 2) return nameLines[1].trim().slice(0, 50);
 
+  // วิธีที่ 5: ชื่อในวงเล็บ
   const parenM = originalText.match(/\(([^\)]{3,30})\)/);
   if (parenM && /[\u0E00-\u0E7F]/.test(parenM[1])) return parenM[1].trim();
 
