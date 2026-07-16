@@ -121,8 +121,6 @@ function formatDate(val) {
     return y + '-' + m + '-' + d;
   }
   return String(val).slice(0, 10);
-
-```
 }
-
+```
 
