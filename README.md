@@ -120,8 +120,9 @@ function formatDate(val) {
     const d = String(val.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + d;
   }
-```
   return String(val).slice(0, 10);
+
+```
 }
 
 
