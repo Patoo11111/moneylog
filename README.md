@@ -1,7 +1,8 @@
 # set up google sheet(database)
 
 google sheet>>ส่วนขยาย>>apps script
-วาง code 
+วาง code
+```
 /**
  * Google Apps Script — MoneyLog Backend (v5)
  * ส่ง CORS header เพื่อให้ fetch จาก browser ทำงานได้
@@ -119,6 +120,7 @@ function formatDate(val) {
     const d = String(val.getDate()).padStart(2, '0');
     return y + '-' + m + '-' + d;
   }
+```
   return String(val).slice(0, 10);
 }
 
